@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Data.Maybe (maybeToList, fromMaybe)
@@ -9,6 +10,8 @@ import System.FilePath (splitDirectories, joinPath, normalise)
 import System.Process (callProcess)
 import GHC.Generics
 import Data.Aeson
+import qualified Data.HashMap.Strict as H
+import Data.Text (unpack)
 
 --  find path in the current directory or above
 findUp :: FilePath -> FilePath -> IO (Maybe FilePath)
@@ -22,12 +25,33 @@ findUp path cwd  = go (splitDirectories (normalise cwd))
             (False, _) -> go (init dirs)
 
 data Config = Config { progName :: String -- ^ program name 
-  , cmd :: Maybe String -- ^ command to substitue with
+                     , subConf :: SubConfig
+                     } deriving (Read, Show, Generic)
+data SubConfig = SubConfig
+  { cmd :: Maybe String -- ^ command to substitue with
   , subcommands :: [(String, String)]
   , translations :: [(String, String)]
-  } deriving (Generic)
+  } deriving (Read, Show, Generic)
 
-instance FromJSON Config
+-- subcommands = undefined
+-- translations = undefined
+
+instance FromJSON SubConfig where
+  parseJSON  (Object v) = do
+    cmd <- v .:? "cmd"
+    subcommands <- v .:? "sub"
+    translations <- v .:? "args"
+
+    return $ SubConfig cmd (split subcommands) (split translations)
+    where split Nothing = []
+          -- split x = [("json", show x)]
+          split (Just (Object cs)) = map parseSub (H.toList cs)
+          parseSub (key, String v) = (unpack key , unpack v)
+
+        
+    
+    
+  
 
 -- ^ find an load the configuration for the given command
 -- lookup for the ".cws" file in current file or up (recursively)
@@ -39,18 +63,23 @@ loadConfig command = do
     case pathM of
       Nothing -> return Nothing
       Just path -> do
-        configs <- loadYamlSettings [path] [] useEnv
-        return (lookup command configs)
+        -- sub <- loadYamlSettings [".csw"] [] useEnv
+        -- return . Just $ Config command sub
+        configs <- loadYamlSettings [".csw"] [] useEnv
+        return $ do
+          sub <- (H.lookup command configs)
+          return $ Config command sub
 
   
 translate :: Config -> String -> [String] -> (String, [String])
 translate config command args = let
-  command = fromMaybe command (cmd config)
-  (sub, args') = translateSubcommand config args
-  in (command, maybeToList sub  ++ map (translateArgument config) args')
+  subc = subConf config
+  command = fromMaybe (progName config) (cmd subc)
+  (sub, args') = translateSubcommand subc args
+  in (command, maybeToList sub  ++ map (translateArgument subc) args')
 
 -- ^ only translate the full word ending to an ==
-translateArgument :: Config -> String -> String
+translateArgument :: SubConfig -> String -> String
 translateArgument config cs =
   let (arg, value) = span (/= '=') cs
   in case lookup arg (translations config)  of
@@ -58,7 +87,7 @@ translateArgument config cs =
        Just new -> new ++ value
 
   -- ^ check if the first argument is a subcommand and translate it
-translateSubcommand :: Config -> [String] -> (Maybe String, [String])
+translateSubcommand :: SubConfig -> [String] -> (Maybe String, [String])
 translateSubcommand _ [] = (Nothing, [])
 translateSubcommand config all@(sub:args) =
   case lookup sub (subcommands config) of
@@ -66,7 +95,7 @@ translateSubcommand config all@(sub:args) =
        Just new -> (Just new, args)
   
 execute :: String -> [String] -> IO ()
-execute command args =  callProcess "env" [] -- command args
+execute command args = callProcess command args
 
 main :: IO ()
 main = do
