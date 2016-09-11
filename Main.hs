@@ -4,7 +4,7 @@ module Main where
 
 import Data.Maybe (maybeToList, fromMaybe, catMaybes)
 import Data.Yaml.Config (loadYamlSettings, useEnv)
-import System.Environment (getArgs, getProgName)
+import System.Environment (getArgs, getProgName, setEnv)
 import System.Directory (doesFileExist, getCurrentDirectory)
 import System.FilePath (splitDirectories, joinPath, normalise)
 import System.Process (callProcess)
@@ -33,6 +33,7 @@ data SubConfig = SubConfig
   , subcommands :: [(String, String)]
   , translations :: [(String, String)]
   , message :: Maybe String -- ^ to display before launching the command
+  , environments :: [(String, String)]
   } deriving (Read, Show, Generic)
 
 -- subcommands = undefined
@@ -44,12 +45,17 @@ instance FromJSON SubConfig where
     subcommands <- v .:? "sub"
     translations <- v .:? "args"
     message <- v .:? "msg"
+    environments <- v .:? "env"
 
-    return $ SubConfig cmd (split subcommands) (split translations) message
-    where split Nothing = []
-          -- split x = [("json", show x)]
-          split (Just (Object cs)) = map parseSub (H.toList cs)
-          parseSub (key, String v) = (unpack key , unpack v)
+    return $ SubConfig cmd
+                      (objectToPairs subcommands)
+                      (objectToPairs translations)
+                      message
+                      (objectToPairs environments)
+    where objectToPairs Nothing = []
+          -- objectToPairs x = [("json", show x)]
+          objectToPairs (Just (Object cs)) = map unpackPair (H.toList cs)
+          unpackPair (key, String v) = (unpack key , unpack v)
 
         
     
@@ -100,6 +106,11 @@ translateSubcommand config all@(sub:args) =
 execute :: String -> [String] -> IO ()
 execute command args = callProcess command args
 
+setEnvironment :: SubConfig -> IO ()
+setEnvironment config = mapM_ (uncurry setEnv)  (environments config) where
+  set (var, value) = do
+    print (var, value)
+    setEnv var value
 main :: IO ()
 main = do
   command <- getProgName
@@ -111,5 +122,6 @@ main = do
     Nothing -> error $ "No configuration found for command " ++ command
     Just config -> do
       let (command', args') = translate config command args
+      setEnvironment (subConf config)
       traverse putStrLn (message (subConf config))
       execute command' args'
