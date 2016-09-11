@@ -40,7 +40,7 @@ For this, create a =.crew= in your home directory with the following :
 Note at the moment, path needs to be absolute (and shell expansion like =~= doesn't work yet).
 To check that you are calling crewed and not the original cabal, you can add a message in the configuration file
 
-#+BEGIN_EXAMPLE yaml
+#+BEGIN_SRC yaml
     cabal:
       cmd: /home/<user>/.cabal/bin/cabal
       msg: This is a crewed version of cabal
