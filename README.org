@@ -1,0 +1,182 @@
+* CREW the command line rewriter
+*Crew* is a tool to rewrite commands on the fly depending on the current directory or project.
+Basic use cases are :
+- selecting the correct version of a tool , ex =ghc-7.8.4= or =ghc-7.10.3=
+- integrating =cabal new-build= with current editor plugin.
+- using =stack= for tool designed to use =cabal=
+- etc ...
+
+*Crew* allows to change the executable, modify or even drop arguments, and set environment variables.
+*Crew* is written in Haskell and has been designed to solve some problems specific to Haskell tooling (mainly cabal new-build and ghc-mod), 
+can be used to anything which needs a *aliasing* per directory.
+
+However, it is at the moment still experimental and I'm taking any responsibilities if anything happen using it.
+*Crew* has been designed for Linux. It should compile on Windows, but I don't know if it is usable or not.
+
+* How it works
+When *Crew* is executed, it tries locate a =.crew= file an located in the current directory or above.
+It applies then the transformation corresponding to the name it's been invocated with (.i.e =argv[0]=).
+
+** Setup
+In order to execute *Crew* instead of the command to rewritten, the trick is to create of copy of *Crew* with the
+name of the command to rewrite. Of course, this new command needs to be in the PATH in a directory with a higher priority.
+
+I recommend to create a =.crew-bin= directory in your home directory and setup your path to use it first.
+Add =PATH=~/.crew-bin:$PATH= at the end of your usual <shell>rc. However to make it work with program launched from the desktop,
+you might need to add in your =.profile= as well.
+
+Let's say you want to tweak =cabal= to call =new-build= whenever =build= is called. You'll need to link *crew* as *cabal* in your=.crew-bin= directory.
+If you have installed *crew* using =cabal= it should be in =~/.cabal/bin=. So you'll need =cd .crew-bin; ln -s ~/.cabal/bin/crew cabal=.
+
+Now, you'll need to tell were the real =cabal= is, otherwise *Crew* will just loop, trying to call =cabal= but only finding itself.
+For this, create a =.crew= in your home directory with the following :
+
+
+#+BEGIN_SRC yaml
+    cabal:
+      cmd: /home/<user>/.cabal/bin/cabal
+#+END_SRC
+
+Note at the moment, path needs to be absolute (and shell expansion like =~= doesn't work yet).
+To check that you are calling crewed and not the original cabal, you can add a message in the configuration file
+
+#+BEGIN_EXAMPLE yaml
+    cabal:
+      cmd: /home/<user>/.cabal/bin/cabal
+      msg: This is a crewed version of cabal
+#+END_EXAMPLE
+
+Any invocation of =cabal= should display =This a crewed version of cabal= before any real cabal messages.
+
+Now, we want to replace =cabal build= with =cabal new-build= but only for the =test-newbuild= project.
+Create a new =.crew= file in the =test-newbuild= directory with the following
+
+#+BEGIN_SRC yaml
+    cabal:
+       msg: CREW: build => new-build
+       sub:
+           build: new-build
+#+END_SRC
+
+=sub= if for subcommand. It only replace =build= by =new-build= if build is the first argument of cabal.
+We don't need to specify the =cmd=. They will be inherited from the =~/.crew=.
+
+If you type =cabal build=, you should see the =CREW: build => new-build= (or new message and the result new-build).
+That's not really exciting, you could have typed =cabal new-build= yourself, but it's handy if you use a text editor with 
+some shortcut bound to call =cabal build=. For example, I use Spacemacs, and pressing =<SPC> c c= will now result in a new-build.
+
+I have other projects using stack. I can configure *Crew* to call =stack build= when Spacemacs try to call =cabal build= (see examples).
+
+
+** Configuration file
+The configuration file is a simple YAML file, which each entry corresponding to a command and different sections.
+*** Command
+=cmd= specifies the command to execute.
+*** Subcommand
+=sub= specifies a list of mapping for subcommands, i.e. the first argument of a command.
+*** Arguments
+=args= specifies a list of mapping for all arguments. At the moment only long argument of flag are replaced.
+*** Skiping arguments
+An argument can be skipped by replacing with an empty string.
+*** Message
+=msg= specifies a message to display before executing the command.
+*** Setting environment variables
+=env= specifies a list of environment variables to set. At the moment, environment variable in the value are not expended.
+*** Inheritence
+All files name =.crew= in or above the current directory are loaded with children version overriding parent one.
+For example, in our example above, =cmd= is defined in =~/.crew= but =msg= is defined in =~/.crew= AND =~/test-newbuild/.crew=.
+=cmd= will be inherited from =~/.crew= but =msg= will use =msg= from =~/test-newbuild=
+*** Reading environment variables
+Values can be overridden with environment variable using the =_env:VAR:default= syntax (taken from =Yesod=).
+Example :
+
+#+BEGIN_SRC yaml
+    cabal:
+       msg: _env:CABAL_MESSAGE: CREW: build => new-build
+#+END_SRC
+
+Typing =cabal= will result in
+
+#+BEGIN_SRC shell
+ > cabal
+ CREW: build => new build
+ cabal: no command given (try --help)
+#+END_SRC
+
+But if CABAL_MESSAGE is set if will be used instead of the default message.
+
+
+#+BEGIN_SRC shell
+> CABAL_MESSAGE="env message" cabal
+env message
+cabal: no command given (try --help)
+#+END_SRC
+
+* Examples
+** cabal new-build
+Cabal-1.24 introduce a NIX-style build. This is a great feature but it requires some new commands instead. We can use crew to map the old command to the new ne.
+
+#+BEGIN_SRC yaml
+cabal:
+   cmd: <path>/cabal
+   sub:
+     build: new-build
+     configure: new-configure
+     repl: new-repl
+     old-build: build
+     old-configure: configure
+     old-repl: repl
+#+END_SRC
+
+In case you need, the old commands, they are mapped as =old-=.
+
+
+** redirect cabal build in Spacemacs to use stack
+Another use of *Crew* is to redirect =<SPC> c c= in Spacemacs to stack. This can be achieved with the following
+Here we don't need to map the sub command are they are both called build. However, the argument to pass some options
+to GHC has a different name, so we remap it.
+
+#+BEGIN_SRC yaml
+cabal:
+   cmd: <path>/stack
+   args:
+     --ghc-option: --ghc-options
+#+END_SRC
+
+** ghc-mod
+=ghc-mod= needs to be compiled with the same version of GHC than the code your use =ghc-mod= for.
+This is a problem when working with projects using a different version of GHC, as you can only have 
+one version of ghc-mod installed globally at the same time.
+A solution to this problem is to rename ghc-mod with it's version number and use crew to select the appropriate version depending on the project.
+
+In a directory using GHC-7.8.4
+
+#+BEGIN_SRC yaml
+ghc-mod:
+   cmd: ghc-mod-7.8.4
+#+END_SRC
+
+In a directory using GHC-7.10.3
+#+BEGIN_SRC yaml
+ghc-mod:
+   cmd: ghc-mod-7.10.3
+#+END_SRC
+
+
+* Todo
+This a work in progress, pull requests are welcomes !
+
+** TODO add global configuration
+** TODO expand home variable
+** TODO allows multiple arguments expansion
+** TODO prepend append value to env variable
+allow things similar PATH = newpath:$PATH
+** TODO add log options
+** TODO display message to sderr
+** TODO add section
+example -mpatter => --test-arguments -mpatter
+** TODO crew command to generate links and default config
+** TODO options to bypass crew
+execute command by removing =.crew-bin= from the path
+
+** TODO use regexp 
