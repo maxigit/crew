@@ -56,6 +56,7 @@ instance FromJSON SubConfig where
           -- objectToPairs x = [("json", show x)]
           objectToPairs (Just (Object cs)) = map unpackPair (H.toList cs)
           unpackPair (key, String v) = (unpack key , unpack v)
+          unpackPair (key, Null) = (unpack key , "")
 
         
     
@@ -85,15 +86,16 @@ translate config command args = let
   subc = subConf config
   command = fromMaybe (progName config) (cmd subc)
   (sub, args') = translateSubcommand subc args
-  in (command, maybeToList sub  ++ map (translateArgument subc) args')
+  in (command, maybeToList sub  ++ catMaybes (map (translateArgument subc) args'))
 
 -- ^ only translate the full word ending to an ==
-translateArgument :: SubConfig -> String -> String
+translateArgument :: SubConfig -> String -> Maybe String
 translateArgument config cs =
   let (arg, value) = span (/= '=') cs
   in case lookup arg (translations config)  of
-       Nothing -> cs
-       Just new -> new ++ value
+       Nothing -> Just cs
+       Just "" -> Nothing
+       Just new -> Just (new ++ value)
 
   -- ^ check if the first argument is a subcommand and translate it
 translateSubcommand :: SubConfig -> [String] -> (Maybe String, [String])
