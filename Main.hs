@@ -53,8 +53,8 @@ instance FromJSON SubConfig where
                       message
                       (objectToPairs environments)
     where objectToPairs Nothing = []
-          -- objectToPairs x = [("json", show x)]
           objectToPairs (Just (Object cs)) = map unpackPair (H.toList cs)
+          objectToPairs val = error $ "Invalid Yaml object " ++ show val
           unpackPair (key, String v) = (unpack key , unpack v)
           unpackPair (key, Null) = (unpack key , "")
 
@@ -69,12 +69,10 @@ instance FromJSON SubConfig where
 loadConfig :: String -> IO (Maybe Config)
 loadConfig command = do
     cwd <- getCurrentDirectory
-    paths <- findUp ".csw" cwd
+    paths <- findUp ".crew" cwd
     case paths of
       [] -> return Nothing
       _ -> do
-        -- sub <- loadYamlSettings [".csw"] [] useEnv
-        -- return . Just $ Config command sub
         configs <- loadYamlSettings paths [] useEnv
         return $ do
           sub <- (H.lookup command configs)
