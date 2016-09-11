@@ -63,7 +63,7 @@ instance FromJSON SubConfig where
     
   
 
--- ^ find an load the configuration for the given command
+-- | find an load the configuration for the given command
 -- lookup for the ".cws" file in current file or up (recursively)
 -- and find the corresponding entry
 loadConfig :: String -> IO (Maybe Config)
@@ -78,30 +78,39 @@ loadConfig command = do
           sub <- (H.lookup command configs)
           return $ Config command sub
 
+-- | Split a string on space, unless
+-- there spaces are escaped
+splitOnSpace :: String -> [String]
+splitOnSpace xs = go [] [] xs where
+  go result current [] = result ++ [current]
+  go result current ('\\':' ':xs) = go result (current++" ") xs
+  go result current (' ':xs) = go (result ++ [current]) [] xs
+  go result current (x:xs) = go result (current++[x]) xs
+
   
 translate :: Config -> String -> [String] -> (String, [String])
 translate config command args = let
   subc = subConf config
-  command = fromMaybe (progName config) (cmd subc)
+  (command:extra) = fromMaybe [progName config] (splitOnSpace `fmap` cmd subc)
   (sub, args') = translateSubcommand subc args
-  in (command, maybeToList sub  ++ catMaybes (map (translateArgument subc) args'))
+  in (command, extra ++ sub  ++ (concatMap (translateArgument subc) args'))
 
--- ^ only translate the full word ending to an ==
-translateArgument :: SubConfig -> String -> Maybe String
+-- | only translate the full word ending to an ==
+translateArgument :: SubConfig -> String -> [String]
 translateArgument config cs =
   let (arg, value) = span (/= '=') cs
   in case lookup arg (translations config)  of
-       Nothing -> Just cs
-       Just "" -> Nothing
-       Just new -> Just (new ++ value)
+       Nothing -> [cs]
+       Just "" -> []
+       Just new -> splitOnSpace new ++ [value]
 
-  -- ^ check if the first argument is a subcommand and translate it
-translateSubcommand :: SubConfig -> [String] -> (Maybe String, [String])
-translateSubcommand _ [] = (Nothing, [])
+-- | check if the first argument is a subcommand and translate it
+translateSubcommand :: SubConfig -> [String] -> ([String], [String])
+translateSubcommand _ [] = ([], [])
 translateSubcommand config all@(sub:args) =
   case lookup sub (subcommands config) of
-       Nothing -> (Nothing, all)
-       Just new -> (Just new, args)
+       Nothing -> ([], all)
+       Just new -> (splitOnSpace new, args)
   
 execute :: String -> [String] -> IO ()
 execute command args = callProcess command args

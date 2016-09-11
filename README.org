@@ -168,7 +168,7 @@ This a work in progress, pull requests are welcomes !
 
 ** TODO add global configuration
 ** TODO expand home variable
-** TODO allows multiple arguments expansion
+** DONE allows multiple arguments expansion
 ** TODO prepend append value to env variable
 allow things similar PATH = newpath:$PATH
 ** TODO add log options
