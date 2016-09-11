@@ -143,6 +143,13 @@ cabal:
      --ghc-option: --ghc-options
 #+END_SRC
 
+** Add watch command to stack
+The =stack build --file-watch --fast= automatically builds your project on change. We can alias it to =stack watch= :
+
+#+BEGIN_SRC yaml
+stack:
+   watch: build --file-watch --fast
+#+END_SRC
 ** ghc-mod
 =ghc-mod= needs to be compiled with the same version of GHC than the code your use =ghc-mod= for.
 This is a problem when working with projects using a different version of GHC, as you can only have 
