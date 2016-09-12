@@ -44,7 +44,7 @@ To check that you are calling crewed and not the original cabal, you can add a m
     cabal:
       cmd: /home/<user>/.cabal/bin/cabal
       msg: This is a crewed version of cabal
-#+END_EXAMPLE
+#+END_SRC
 
 Any invocation of =cabal= should display =This a crewed version of cabal= before any real cabal messages.
 
