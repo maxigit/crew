@@ -37,6 +37,14 @@ For this, create a =.crew= in your home directory with the following :
       cmd: /home/<user>/.cabal/bin/cabal
 #+END_SRC
 
+Alternatively you can alter the path to find the real cabal. You don't need them to specify the command. *Crew* will use the orginal command.
+
+#+BEGIN_SRC yaml
+    cabal:
+      path:
+         prepend: "/home/<user>:"
+#+END_SRC
+
 Note at the moment, path needs to be absolute (and shell expansion like =~= doesn't work yet).
 To check that you are calling crewed and not the original cabal, you can add a message in the configuration file
 
@@ -81,7 +89,26 @@ An argument can be skipped by replacing with an empty string.
 *** Message
 =msg= specifies a message to display before executing the command.
 *** Setting environment variables
-=env= specifies a list of environment variables to set. At the moment, environment variable in the value are not expended.
+=env= specifies a list of environment variables to set or modify.
+Variable can be either set with a new value or modified by prepending and/or appending a value to the existing value.
+Examples;
+
+#+BEGIN_SRC yaml
+   PATH: /home/user/.local/bin
+#+END_SRC
+Set =PATH= to =/home/user/.local/bin=
+
+#+BEGIN_SRC yaml
+   PATH:
+      prepend: "/home/user/.local/bin:"
+      append: :/home/user/.other/bin
+#+END_SRC
+
+set is equivalent to =/home/user/.local/bin:$PATH:/home/user.other/bin=. Note the =prepend= value needs to be between quote.
+This is due to yaml not liking value ending with =:=.
+
+   
+At the moment, environment variable in the value are not expended.
 *** Inheritence
 All files name =.crew= in or above the current directory are loaded with children version overriding parent one.
 For example, in our example above, =cmd= is defined in =~/.crew= but =msg= is defined in =~/.crew= AND =~/test-newbuild/.crew=.

@@ -1,10 +1,9 @@
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Data.Maybe (maybeToList, fromMaybe, catMaybes)
 import Data.Yaml.Config (loadYamlSettings, useEnv)
-import System.Environment (getArgs, getProgName, setEnv)
+import System.Environment (getArgs, getProgName, setEnv, lookupEnv)
 import System.Directory (doesFileExist, getCurrentDirectory)
 import System.FilePath (splitDirectories, joinPath, normalise)
 import System.Process (callProcess)
@@ -25,16 +24,26 @@ findUp path cwd  = fmap catMaybes $ mapM exists (reverse $ inits (splitDirectori
                    then Just path'
                    else Nothing
 
+data StringOperation = Replace String | Concat (Maybe  String) (Maybe String) deriving (Read, Show )
+instance FromJSON StringOperation where
+  parseJSON (String v) = return $ Replace (unpack v)
+  parseJSON (Object v) = do
+    prepend <- v .:? "prepend"
+    append <- v .:? "append"
+    return $ Concat (fmap unpack prepend) (fmap unpack append)
+  parseJSON v = error $ "Invalid Yaml " ++ show v
+
 data Config = Config { progName :: String -- ^ program name 
                      , subConf :: SubConfig
-                     } deriving (Read, Show, Generic)
+                     } deriving (Read, Show)
+
 data SubConfig = SubConfig
   { cmd :: Maybe String -- ^ command to substitue with
   , subcommands :: [(String, String)]
   , translations :: [(String, String)]
   , message :: Maybe String -- ^ to display before launching the command
-  , environments :: [(String, String)]
-  } deriving (Read, Show, Generic)
+  , environments :: [(String, StringOperation)]
+  } deriving (Read, Show)
 
 -- subcommands = undefined
 -- translations = undefined
@@ -42,21 +51,30 @@ data SubConfig = SubConfig
 instance FromJSON SubConfig where
   parseJSON  (Object v) = do
     cmd <- v .:? "cmd"
-    subcommands <- v .:? "sub"
-    translations <- v .:? "args"
+    subcommands <- objectToPairs unpack' =<< v .:? "sub"
+    translations <- objectToPairs unpack' =<< v .:? "args"
     message <- v .:? "msg"
-    environments <- v .:? "env"
+    environments <- objectToPairs parseJSON =<< v .:? "env"
 
     return $ SubConfig cmd
-                      (objectToPairs subcommands)
-                      (objectToPairs translations)
+                      subcommands
+                      translations
                       message
-                      (objectToPairs environments)
-    where objectToPairs Nothing = []
-          objectToPairs (Just (Object cs)) = map unpackPair (H.toList cs)
-          objectToPairs val = error $ "Invalid Yaml object " ++ show val
-          unpackPair (key, String v) = (unpack key , unpack v)
-          unpackPair (key, Null) = (unpack key , "")
+                      environments
+    where objectToPairs _ Nothing = return []
+          objectToPairs f (Just (Object cs)) = mapM (unpackPair f) (H.toList cs)
+          objectToPairs _ val = error $ "Invalid Yaml object " ++ show val
+          unpackPair f (key, v') = do
+            val <- f v'
+            return (unpack key, val)
+
+          unpack' (String v') = return $ unpack v'
+          unpack' Null = return $ ""
+          unpack' o = error $ "Invalid Yaml " ++ show o
+
+  parseJSON  v = error $ "Invalid Yaml" ++ show v
+
+          
 
         
     
@@ -116,10 +134,16 @@ execute :: String -> [String] -> IO ()
 execute command args = callProcess command args
 
 setEnvironment :: SubConfig -> IO ()
-setEnvironment config = mapM_ (uncurry setEnv)  (environments config) where
-  set (var, value) = do
-    print (var, value)
-    setEnv var value
+setEnvironment config = mapM_ set  (environments config) where
+  set (var, op) = do
+    new <- case op of
+      Replace value -> return value
+      Concat prepend append -> do
+        value <- lookupEnv var
+        return . concat $ catMaybes [prepend , value , append] 
+      
+    -- print (var, new)
+    setEnv var new
 main :: IO ()
 main = do
   command <- getProgName
