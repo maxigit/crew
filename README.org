@@ -82,12 +82,35 @@ The configuration file is a simple YAML file, which each entry corresponding to 
 =cmd= specifies the command to execute.
 *** Subcommand
 =sub= specifies a list of mapping for subcommands, i.e. the first argument of a command.
+=sub= can be either a value, or a mappings. A mapping allows to specify a different set of arguments mappings,
+environment variables and message for each subcommand. Use =smdcmd= to specify a different sub-command within a mapping.
+
+The following example redirect =cabal build= to =cabal new-build=
+#+BEGIN_SRC yaml
+cabal:
+   sub:
+     build: new-build
+#+END_SRC
+
+We can add a message specify to the build command, this way :
+
+#+BEGIN_SRC yaml
+cabal:
+   cmd: stack
+   sub: 
+     build:
+        subcmd: new-build 
+        msg: "Cabal new-build"
+#+END_SRC
+
+Note, the need to add =subcmd: new-build=, to specify the sub-command mapping.
 *** Arguments
-=args= specifies a list of mapping for all arguments. At the moment only long argument of flag are replaced.
+=args= specifies a list of mapping for all arguments. At the moment only long argument of flag are replaced. Can be specified at a command or sub-command level.
 *** Skiping arguments
-An argument can be skipped by replacing with an empty string.
+An argument can be skipped by replacing with an empty string. 
 *** Message
 =msg= specifies a message to display before executing the command.
+Can be specified at a command or sub-command level.
 *** Setting environment variables
 =env= specifies a list of environment variables to set or modify.
 Variable can be either set with a new value or modified by prepending and/or appending a value to the existing value.
@@ -109,6 +132,7 @@ This is due to yaml not liking value ending with =:=.
 
    
 At the moment, environment variable in the value are not expended.
+Can be specified at a command or sub-command level.
 *** Inheritence
 All files name =.crew= in or above the current directory are loaded with children version overriding parent one.
 For example, in our example above, =cmd= is defined in =~/.crew= but =msg= is defined in =~/.crew= AND =~/test-newbuild/.crew=.
@@ -160,7 +184,7 @@ In case you need, the old commands, they are mapped as =old-=.
 
 ** redirect cabal build in Spacemacs to use stack
 Another use of *Crew* is to redirect =<SPC> c c= in Spacemacs to stack. This can be achieved with the following
-Here we don't need to map the sub command are they are both called build. However, the argument to pass some options
+Here we don't need to map the sub-command are they are both called build. However, the argument to pass some options
 to GHC has a different name, so we remap it.
 
 #+BEGIN_SRC yaml
@@ -203,7 +227,8 @@ This a work in progress, pull requests are welcomes !
 ** TODO add global configuration
 ** TODO expand home variable
 ** DONE allows multiple arguments expansion
-** TODO prepend append value to env variable
+** DONE prepend append value to env variable
+CLOSED: [2016-09-14 Wed 21:51]
 allow things similar PATH = newpath:$PATH
 ** TODO add log options
 ** TODO display message to sderr
