@@ -172,7 +172,7 @@ translateArgument config cs =
   in case lookup arg (translations config)  of
        Nothing -> [cs]
        Just "" -> []
-       Just new -> splitOnSpace new ++ [value]
+       Just new -> splitOnSpace (new ++ value)
 
 -- | check if the first argument is a subcommand and translate it
 translateSubcommand :: Config -> [String] -> ([String], [String])
